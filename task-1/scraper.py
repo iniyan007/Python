@@ -90,7 +90,7 @@ def save(products):
 
     for p in products:
         cursor.execute("""
-        INSERT OR REPLACE INTO products (sku, name, price, date)
+        INSERT INTO products (sku, name, price, date)
         VALUES (?, ?, ?, ?)
         """, (p["sku"], p["name"], p["price"], today))
 
