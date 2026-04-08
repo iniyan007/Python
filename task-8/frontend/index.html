@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sensor Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f4f4f1;
+      color: #1a1a18;
+      min-height: 100vh;
+      padding: 1.5rem;
+    }
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.5rem;
+    }
+    .top-bar h1 {
+      font-size: 20px;
+      font-weight: 500;
+    }
+    .ws-status {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 13px;
+      color: #888780;
+    }
+    .ws-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #B4B2A9;
+      transition: background 0.3s;
+    }
+    .ws-dot.connected { background: #639922; }
+    .ws-dot.error     { background: #E24B4A; }
+    .sensor-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 3px 10px;
+      border-radius: 6px;
+      background: #D3D1C7;
+      color: #444441;
+      margin-left: 10px;
+      transition: background 0.3s, color 0.3s;
+    }
+    .sensor-badge.ok       { background: #C0DD97; color: #27500A; }
+    .sensor-badge.critical { background: #F7C1C1; color: #791F1F; }
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 1.25rem;
+    }
+    .metric {
+      background: #fff;
+      border: 0.5px solid rgba(0,0,0,0.1);
+      border-radius: 10px;
+      padding: 1rem 1.1rem;
+    }
+    .metric-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #888780;
+      margin-bottom: 6px;
+    }
+    .metric-value {
+      font-size: 26px;
+      font-weight: 500;
+      color: #1a1a18;
+      line-height: 1;
+    }
+    .metric-sub {
+      font-size: 11px;
+      color: #B4B2A9;
+      margin-top: 4px;
+    }
+    #m-z.danger { color: #A32D2D; }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 12px;
+    }
+
+    .card {
+      background: #fff;
+      border: 0.5px solid rgba(0,0,0,0.1);
+      border-radius: 12px;
+      padding: 1.1rem 1.25rem;
+    }
+    .card-title {
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #888780;
+      margin-bottom: 1rem;
+    }
+    .chart-wrap {
+      position: relative;
+      height: 280px;
+    }
+
+    .alert-list {
+      display: flex;
+      flex-direction: column;
+      max-height: 340px;
+      overflow-y: auto;
+    }
+    .alert-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 9px 0;
+      border-bottom: 0.5px solid rgba(0,0,0,0.07);
+    }
+    .alert-item:last-child { border-bottom: none; }
+    .alert-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-top: 4px;
+      flex-shrink: 0;
+    }
+    .alert-dot.critical { background: #E24B4A; }
+    .alert-dot.ok       { background: #639922; }
+    .alert-info { flex: 1; }
+    .alert-time { font-size: 11px; color: #B4B2A9; }
+    .alert-msg  { font-size: 13px; color: #1a1a18; margin-top: 2px; }
+    .alert-temp { font-size: 12px; font-weight: 500; margin-top: 1px; }
+    .alert-temp.critical { color: #A32D2D; }
+    .alert-temp.ok       { color: #3B6D11; }
+    .empty-state {
+      font-size: 13px;
+      color: #B4B2A9;
+      text-align: center;
+      padding: 2.5rem 0;
+    }
+
+    @keyframes flash-border {
+      0%,100% { border-color: rgba(0,0,0,0.1); }
+      50%      { border-color: #E24B4A; }
+    }
+    .card.flash { animation: flash-border 0.5s ease 2; }
+
+    @media (max-width: 700px) {
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+      .grid    { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+    <div class="top-bar">
+    <div style="display:flex;align-items:center;">
+      <h1>Sensor Dashboard</h1>
+      <span class="sensor-badge" id="sensor-badge">Connecting</span>
+    </div>
+    <div class="ws-status">
+      <div class="ws-dot" id="ws-dot"></div>
+      <span id="ws-label">Waiting for server...</span>
+    </div>
+  </div>
+
+    <div class="metrics">
+    <div class="metric">
+      <div class="metric-label">Current temp</div>
+      <div class="metric-value" id="m-current">--</div>
+      <div class="metric-sub">°F live reading</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Moving avg</div>
+      <div class="metric-value" id="m-avg">--</div>
+      <div class="metric-sub">5-min window</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Z-score</div>
+      <div class="metric-value" id="m-z">--</div>
+      <div class="metric-sub">std deviations</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Alerts fired</div>
+      <div class="metric-value" id="m-alerts">0</div>
+      <div class="metric-sub">this session</div>
+    </div>
+  </div>
+
+    <div class="grid">
+    <div class="card" id="chart-card">
+      <div class="card-title">Temperature &mdash; Sensor T1</div>
+      <div class="chart-wrap">
+        <canvas id="chart" role="img" aria-label="Live temperature line chart for sensor T1">Live data loading...</canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Alert log</div>
+      <div class="alert-list" id="alert-list">
+        <div class="empty-state" id="empty-state">No alerts yet</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+    const chart = new Chart(document.getElementById('chart'), {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Temperature (°F)',
+        data: [],
+        borderColor: '#378ADD',
+        backgroundColor: 'rgba(55,138,221,0.07)',
+        borderWidth: 1.8,
+        pointRadius: 3,
+        pointBackgroundColor: '#378ADD',
+        fill: true,
+        tension: 0.35
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 300 },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.parsed.y}°F`
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { font: { size: 11 }, color: '#888780', maxTicksLimit: 8 },
+          grid:  { color: 'rgba(136,135,128,0.1)' }
+        },
+        y: {
+          min: 60, max: 120,
+          ticks: { font: { size: 11 }, color: '#888780', callback: v => v + '°' },
+          grid:  { color: 'rgba(136,135,128,0.1)' }
+        }
+      }
+    }
+  });
+
+  
+  let alertCount = 0;
+
+  
+  function updateMetrics(data) {
+    document.getElementById('m-current').textContent = data.current + '°';
+    document.getElementById('m-avg').textContent     = data.avg + '°';
+
+    const zEl = document.getElementById('m-z');
+    zEl.textContent = data.z_score;
+    zEl.className = 'metric-value' + (Math.abs(data.z_score) > 2 ? ' danger' : '');
+
+    const badge = document.getElementById('sensor-badge');
+    if (data.status === 'CRITICAL') {
+      badge.textContent = 'Critical';
+      badge.className = 'sensor-badge critical';
+    } else {
+      badge.textContent = 'Normal';
+      badge.className = 'sensor-badge ok';
+    }
+  }
+
+  
+  function addAlert(data) {
+    alertCount++;
+    document.getElementById('m-alerts').textContent = alertCount;
+
+    const list = document.getElementById('alert-list');
+    const empty = document.getElementById('empty-state');
+    if (empty) empty.remove();
+
+    const isCrit = data.status === 'CRITICAL';
+
+      if (isCrit) {
+      const cc = document.getElementById('chart-card');
+      cc.classList.remove('flash');
+      void cc.offsetWidth;
+      cc.classList.add('flash');
+    }
+
+    const item = document.createElement('div');
+    item.className = 'alert-item';
+    item.innerHTML = `
+      <div class="alert-dot ${isCrit ? 'critical' : 'ok'}"></div>
+      <div class="alert-info">
+        <div class="alert-time">${data.timestamp}</div>
+        <div class="alert-msg">${isCrit ? 'Critical threshold exceeded' : 'Returned to normal'}</div>
+        <div class="alert-temp ${isCrit ? 'critical' : 'ok'}">${data.current}°F &nbsp;&middot;&nbsp; z = ${data.z_score}</div>
+      </div>`;
+
+    list.prepend(item);
+    
+    while (list.children.length > 30) list.lastChild.remove();
+  }
+
+  
+  function connectWebSocket() {
+    const ws    = new WebSocket('ws://127.0.0.1:8000/ws');
+    const dot   = document.getElementById('ws-dot');
+    const label = document.getElementById('ws-label');
+
+    ws.onopen = () => {
+      dot.className   = 'ws-dot connected';
+      label.textContent = 'Connected';
+    };
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+  
+      chart.data.labels.push(data.timestamp);
+      chart.data.datasets[0].data.push(data.current);
+      if (chart.data.labels.length > 50) {
+        chart.data.labels.shift();
+        chart.data.datasets[0].data.shift();
+      }
+      chart.update('none');
+
+  
+      updateMetrics(data);
+
+    if (data.status === 'CRITICAL') {
+        addAlert(data);
+      }
+    };
+
+    ws.onerror = () => {
+      dot.className   = 'ws-dot error';
+      label.textContent = 'Connection error';
+      const badge = document.getElementById('sensor-badge');
+      badge.textContent = 'Offline';
+      badge.className   = 'sensor-badge';
+    };
+
+    ws.onclose = () => {
+      dot.className   = 'ws-dot error';
+      label.textContent = 'Reconnecting in 3s...';
+      setTimeout(connectWebSocket, 3000);
+    };
+  }
+
+  connectWebSocket();
+</script>
+</body>
+</html>
