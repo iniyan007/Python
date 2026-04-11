@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial; }
+        h1 { text-align: center; }
+        .section { margin: 20px 0; }
+        .warning { color: red; font-weight: bold; }
+        img { width: 100%; }
+    </style>
+</head>
+<body>
+
+<h1>Monthly Sales Report — {{ month }}</h1>
+
+<div class="section">
+    <p><b>Total Revenue:</b> {{ total_revenue }}</p>
+    <p><b>Units Sold:</b> {{ total_units }}</p>
+    <p><b>Avg Order Value:</b> {{ avg_order }}</p>
+</div>
+
+<div class="section">
+    <h3>Revenue by Region</h3>
+    <img src="{{ region_chart }}">
+</div>
+
+<div class="section">
+    <h3>Daily Sales Trend</h3>
+    <img src="{{ daily_chart }}">
+</div>
+
+{% if warning %}
+<div class="section warning">
+    ⚠ {{ warning }}
+</div>
+{% endif %}
+
+<footer>
+    <p>Generated at: {{ timestamp }}</p>
+</footer>
+
+</body>
+</html>
