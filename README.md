@@ -55,3 +55,7 @@
 ## Task-14 Completed ✅
 
 - Concurrent Web Crawler with Depth Control
+
+## Task-15 Completed ✅
+
+- Event-Driven Microservice with CQRS Pattern
